@@ -1,0 +1,4 @@
+﻿local-tts/models/
+local-tts/__pycache__/
+local-tts/test.wav
+*.pyc
