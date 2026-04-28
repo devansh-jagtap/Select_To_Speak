@@ -31,17 +31,33 @@ function showControls(text) {
   // Pause / Resume
   const pauseBtn = createButton(iconPause(), "Pause", (e) => {
     e.stopPropagation();
-    if (!ttsAudio) return;
-    if (!ttsAudio.paused) {
-      ttsAudio.pause();
-      pauseBtn.innerHTML = "";
-      pauseBtn.appendChild(iconResume());
-      pauseBtn.title = "Resume";
-    } else {
-      ttsAudio.play();
-      pauseBtn.innerHTML = "";
-      pauseBtn.appendChild(iconPause());
-      pauseBtn.title = "Pause";
+
+    if (ttsAudio) {
+      // Local TTS audio element
+      if (!ttsAudio.paused) {
+        ttsAudio.pause();
+        pauseBtn.innerHTML = "";
+        pauseBtn.appendChild(iconResume());
+        pauseBtn.title = "Resume";
+      } else {
+        ttsAudio.play();
+        pauseBtn.innerHTML = "";
+        pauseBtn.appendChild(iconPause());
+        pauseBtn.title = "Pause";
+      }
+    } else if (speechSynthesis.speaking || speechSynthesis.paused) {
+      // Browser TTS fallback
+      if (!speechSynthesis.paused) {
+        speechSynthesis.pause();
+        pauseBtn.innerHTML = "";
+        pauseBtn.appendChild(iconResume());
+        pauseBtn.title = "Resume";
+      } else {
+        speechSynthesis.resume();
+        pauseBtn.innerHTML = "";
+        pauseBtn.appendChild(iconPause());
+        pauseBtn.title = "Pause";
+      }
     }
   });
 
@@ -82,20 +98,32 @@ async function speakText(text) {
       body: JSON.stringify({ text }),
     });
 
-    if (!response.ok) {
-      console.error("TTS server error:", response.status);
-      return;
-    }
+    if (!response.ok) throw new Error("Server error");
 
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     ttsAudio = new Audio(url);
     ttsAudio.onended = () => URL.revokeObjectURL(url);
     ttsAudio.play();
-
   } catch (err) {
-    console.error("TTS fetch failed:", err);
+    // Server is off or unreachable — fall back to browser TTS
+    console.warn("Local TTS unavailable, using browser fallback");
+    fallbackSpeak(text);
   }
+}
+
+function fallbackSpeak(text) {
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1;
+  utterance.pitch = 1;
+
+  const voices = speechSynthesis.getVoices();
+  const preferred = voices.find((v) => v.lang === "en-US");
+  if (preferred) utterance.voice = preferred;
+
+  window.speechSynthesis.speak(utterance);
 }
 
 function stopSpeaking() {
@@ -104,6 +132,7 @@ function stopSpeaking() {
     ttsAudio.currentTime = 0;
     ttsAudio = null;
   }
+  window.speechSynthesis.cancel();
 }
 
 function removeControls() {
